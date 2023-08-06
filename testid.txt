@@ -1,0 +1,181 @@
+** Test1:
+case class Circle(x: Double, y: Double, radius: Double)
+extension (c: Circle)
+  def circumference: Double = c.radius * math.Pi * 2
+vs.
+case class Circle(x: Double, y: Double, radius: Double)
+  def circumference: Double = c.radius * math.Pi * 2
+
+** Test2:
+extension [T](xs: List[T])
+  def second = xs.tail.head
+Testida, kas second on aeglasem kui _.tail.head.
+
+* Context Functions
+** Test1:
+def table(init: Table ?=> Unit) =
+    given t: Table = Table()
+    init
+    t
+
+  def row(init: Row ?=> Unit)(using t: Table) =
+     given r: Row = Row()
+     init
+     t.add(r)
+
+  def cell(str: String)(using r: Row) =
+     r.add(new Cell(str))
+
+table {
+    row {
+      cell("top left")
+      cell("top right")
+    }
+    row {
+      cell("bottom left")
+      cell("bottom right")
+    }
+  }
+vs 
+val t = Table()
+val r1 = Row()
+val r2 = Row()
+val r3 = Row()
+t.add(r1)
+r1.add(new Cell("top left"))
+...
+* Enumerations
+enum Color:
+  case Red, Green, Blue
+vs.
+object Color extends Enumeration {
+  type Color = Value
+
+  val Red      = Value("Red")
+  val Green    = Value("Green")
+  val Blue     = Value("Blue")
+}
+* Opaque Type Aliases
+object MyMath:
+
+  opaque type Logarithm = Double
+
+  object Logarithm:
+
+    // These are the two ways to lift to the Logarithm type
+
+    def apply(d: Double): Logarithm = math.log(d)
+
+    def safe(d: Double): Option[Logarithm] =
+      if d > 0.0 then Some(math.log(d)) else None
+
+  end Logarithm
+
+  // Extension methods define opaque types' public APIs
+  extension (x: Logarithm)
+    def toDouble: Double = math.exp(x)
+    def + (y: Logarithm): Logarithm = Logarithm(math.exp(x) + math.exp(y))
+    def * (y: Logarithm): Logarithm = x + y
+
+end MyMath
+vs.
+type Logarithm = Double
+vs 
+class Logarithm(d:Double)
+	def v : Double = math.log(d)
+* Intersection Types
+trait Resettable:
+  def reset(): Unit
+
+trait Growable[T]:
+  def add(t: T): Unit
+
+def f(x: Resettable & Growable[String]) =
+  x.reset()
+  x.add("first")
+vs.
+def f(x: Resettable with Growable[String]) =
+  x.reset()
+  x.add("first")
+* Union Types
+case class UserName(name: String)
+case class Password(hash: Hash)
+
+def help(id: UserName | Password) =
+  val user = id match
+    case UserName(name) => lookupName(name)
+    case Password(hash) => lookupPassword(hash)
+vs.
+def help(id: Either[UserName, Password]) =
+  val user = id match
+    case Left(UserName(name)) => lookupName(name)
+    case Right(Password(hash)) => lookupPassword(hash)
+*Dependent Function Types
+trait Entry { type Key; val key: Key }
+
+def extractKey(e: Entry): e.Key = e.key  
+val extractor: (e: Entry) => e.Key = extractKey  
+meetodi sees kutsuda extractor
+v.s.
+meetodi sees kutsuda extractKey
+v.s.
+kutsuda:
+val extractor: (e: Entry) => Any = _.key
+* Polymorphic Function Types
+enum Expr[A]:
+  case Var(name: String)
+  case Apply[A, B](fun: Expr[B => A], arg: Expr[B]) extends Expr[A]
+def mapSubexpressions[A](e: Expr[A])(f: [B] => Expr[B] => Expr[B]): Expr[A] =
+  e match
+    case Apply(fun, arg) => Apply(f(fun), f(arg))
+    case Var(n) => Var(n)
+val e0 = Apply(Var("f"), Var("a"))
+val e1 = mapSubexpressions(e0)(
+  [B] => (se: Expr[B]) => Apply(Var[B => B]("wrap"), se))
+vs.
+enum Expr:
+  case Var(name: String)
+  case Apply(fun: Expr, arg: Expr) extends Expr
+def mapSubexpressions[A](e: Expr)(f: Expr => Expr): Expr =
+  e match
+    case Apply(fun, arg) => Apply(f(fun), f(arg))
+    case Var(n) => Var(n)
+val e0 = Apply(Var("f"), Var("a"))
+val e1 = mapSubexpressions(e0)(
+  (se: Expr) => Apply(Var("wrap"), se))
+* Match Types
+type Elem[X] = X match
+  case String => Char
+  case Array[t] => t
+  case Iterable[t] => t
+type LeafElem[X] = X match
+  case String => Char
+  case Array[t] => LeafElem[t]
+  case Iterable[t] => LeafElem[t]
+  case AnyVal => X
+def leafElem[X](x: X): LeafElem[X] = x match
+  case x: String      => x.charAt(0)
+  case x: Array[t]    => leafElem(x(0))
+  case x: Iterable[t] => leafElem(x.head)
+  case x: AnyVal      => x
+vs.
+def leafElem[X](x: X): Any = x match
+  case x: String      => x.charAt(0)
+  case x: Array[t]    => leafElem(x(0))
+  case x: Iterable[t] => leafElem(x.head)
+  case x: AnyVal      => x
+
+* Trait Parameters
+trait Greeting(val name: String):
+  def msg = s"How are you, $name"
+
+class C extends Greeting("Bob"):
+  println(msg)
+vs
+trait Greeting:
+  val name: String
+  def msg = s"How are you, $name"
+
+class C extends Greeting:
+  val name = "Bob"
+  println(msg)
